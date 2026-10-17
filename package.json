@@ -1,0 +1,56 @@
+{
+  "name": "coin-scout",
+  "version": "0.1.0",
+  "description": "Blazing-fast read-only MCP server exposing Helius Solana data for financial analysis and fraud investigation",
+  "type": "module",
+  "bin": {
+    "coin-scout": "./build/index.js"
+  },
+  "main": "./build/index.js",
+  "files": [
+    "build"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js",
+    "bundle": "esbuild src/standalone.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/coin-scout.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\"",
+    "dev": "tsx src/index.ts",
+    "http": "tsx src/http.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "bench": "tsx scripts/bench.ts",
+    "stdio-load": "tsx scripts/stdio-load.ts",
+    "verify-fixes": "tsx scripts/verify-fixes.ts",
+    "validate": "tsx scripts/validate.ts"
+  },
+  "keywords": [
+    "mcp",
+    "solana",
+    "helius",
+    "blockchain",
+    "fraud-detection",
+    "onchain-analysis"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dennisyilmaz/coin-scout.git"
+  },
+  "homepage": "https://github.com/dennisyilmaz/coin-scout#readme",
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "undici": "^8.10.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
