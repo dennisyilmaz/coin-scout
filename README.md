@@ -130,7 +130,7 @@ Helius bills per RPC call, and `trace_funds` / `analyze_wallet` fan out to hundr
 
 ```bash
 npm run typecheck      # tsc --noEmit          — free
-npm test               # 43 unit tests         — free, no network
+npm test               # 44 unit tests         — free, no network
 npm run dev            # stdio server via tsx
 npm run verify-fixes   # ~4 calls  — regression check on get_swaps / get_asset_activity
 npm run smoke          # ~15 calls — one hit per Helius endpoint used
