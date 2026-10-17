@@ -1,3 +1,3 @@
 # Security policy
 
-Report vulnerabilities privately through GitHub: **Security → Report a vulnerability** on this repository. Please do not open a public issue.
+Report vulnerabilities privately through [GitHub private vulnerability reporting](https://github.com/dennisyilmaz/coin-scout/security/advisories/new). Please do not open a public issue.

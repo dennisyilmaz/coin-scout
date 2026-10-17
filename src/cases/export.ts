@@ -336,6 +336,6 @@ function fmt(value: number): string {
   }).format(value);
 }
 
-function cell(text: string): string {
-  return text.replace(/\|/g, "\\|").replace(/\n/g, " ");
+export function cell(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }

@@ -11,7 +11,7 @@ import {
   slugify,
   updateCase,
 } from "../src/cases/store.js";
-import { exportCase } from "../src/cases/export.js";
+import { cell, exportCase } from "../src/cases/export.js";
 import { labelOf } from "../src/util/programs.js";
 
 const ROOT = "Root111111111111111111111111111111111111111";
@@ -56,6 +56,12 @@ describe("case store", () => {
     const hits = findAddress(SINK);
     expect(hits.map((h) => h.case).sort()).toEqual(["example-case", "other-case"]);
     expect(findAddress(ROOT)[0].notes).toHaveLength(1);
+  });
+});
+
+describe("cell", () => {
+  it("escapes backslashes before pipes so a label cannot break the table", () => {
+    expect(cell("a\\|b\nc")).toBe("a\\\\\\|b c");
   });
 });
 
