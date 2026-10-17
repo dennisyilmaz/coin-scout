@@ -1,6 +1,6 @@
 {
   "name": "coin-scout",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Blazing-fast read-only MCP server exposing Helius Solana data for financial analysis and fraud investigation",
   "type": "module",
   "bin": {
@@ -11,11 +11,11 @@
     "build"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19"
   },
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",
-    "bundle": "esbuild src/standalone.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/coin-scout.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\"",
+    "bundle": "esbuild src/standalone.ts --bundle --platform=node --format=esm --target=node22 --outfile=build/coin-scout.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\"",
     "dev": "tsx src/index.ts",
     "http": "tsx src/http.ts",
     "smoke": "tsx scripts/smoke.ts",
@@ -43,7 +43,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "undici": "^8.10.0",
+    "undici": "^8.12.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -51,6 +51,6 @@
     "esbuild": "^0.28.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   }
 }

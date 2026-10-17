@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+  schedule:
+    - cron: "0 14 * * 6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.repository == 'dennisyilmaz/coin-scout' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BUMP: ${{ inputs.bump || 'patch' }}
+        run: |
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$last" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "version=0.1.0" >> "$GITHUB_OUTPUT"
+            echo "First release: v0.1.0" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Scheduled runs ignore docs/CI-only changes; a manual run releases any new commit.
+          if [ "$EVENT" = "schedule" ]; then
+            paths="src package.json package-lock.json tsconfig.json"
+          else
+            paths="."
+          fi
+          if git diff --quiet "$last" HEAD -- $paths; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing to release: no relevant changes since $last." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          version=$(node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const bump = process.argv[2];
+            console.log(bump === "major" ? `${major + 1}.0.0` : bump === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`);
+          ' "${last#v}" "$BUMP")
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version ($BUMP after $last)" >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: [plan, checks]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Stamp version
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          sed -i "s/0\.0\.0-development/$VERSION/" src/version.ts
+          grep -q "\"$VERSION\"" src/version.ts
+      - run: npm run build
+      - run: npm run bundle
+      - name: Package assets
+        run: |
+          mkdir dist
+          cp build/coin-scout.mjs dist/coin-scout.mjs
+          npm pack --pack-destination dist
+          (cd dist && sha256sum * > SHA256SUMS)
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes

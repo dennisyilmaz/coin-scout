@@ -7,6 +7,7 @@ import { registerAnalysisTools } from "./tools/analysis.js";
 import { registerPrompts } from "./tools/prompts.js";
 import { registerCaseTools } from "./tools/cases.js";
 import { initCases } from "./cases/store.js";
+import { VERSION } from "./version.js";
 
 const INSTRUCTIONS = `coin-scout is a read-only Solana data server backed by Helius. It never signs or submits transactions.
 
@@ -41,7 +42,7 @@ export function createRuntime(config: Config = loadConfig()): Runtime {
 
 export function buildMcpServer(runtime: Runtime): McpServer {
   const server = new McpServer(
-    { name: "coin-scout", version: "0.1.0", title: "Coin Scout — Solana intelligence" },
+    { name: "coin-scout", version: VERSION, title: "Coin Scout — Solana intelligence" },
     {
       capabilities: { tools: {}, prompts: {} },
       instructions: INSTRUCTIONS,

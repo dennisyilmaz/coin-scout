@@ -40,7 +40,7 @@ Or in `claude_desktop_config.json` / any MCP client:
 npm run bundle        # writes build/coin-scout.mjs — the whole server, no node_modules needed
 ```
 
-Send that file to someone with Node 20+ and Claude Code. They run `node coin-scout.mjs`, paste their Helius API key, restart Claude Code, and the tools are there. The file copies itself to `~/.coin-scout/` and registers itself at user scope.
+Send that file to someone with Node 22+ and Claude Code. They run `node coin-scout.mjs`, paste their Helius API key, restart Claude Code, and the tools are there. The file copies itself to `~/.coin-scout/` and registers itself at user scope.
 
 Streamable HTTP instead of stdio:
 
