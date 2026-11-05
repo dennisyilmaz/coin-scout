@@ -1,26 +1,47 @@
 # coin-scout
 
-A read-only MCP server that gives an AI agent deep, fast access to Solana on-chain data through [Helius](https://www.helius.dev) — built for financial analysis and fraud investigation.
+[![CI](https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dennisyilmaz/coin-scout)](https://github.com/dennisyilmaz/coin-scout/releases/latest)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dennisyilmaz/coin-scout/badge)](https://scorecard.dev/viewer/?uri=github.com/dennisyilmaz/coin-scout)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Speaks the **2026-07-28** MCP revision (`@modelcontextprotocol/server` v2, stateless core, `server/discover`, cacheable `tools/list`). Ships both a stdio entry point and a Streamable HTTP entry point.
+A read-only [MCP](https://modelcontextprotocol.io) server that gives an AI agent deep, fast access to Solana on-chain data through [Helius](https://www.helius.dev), built for financial analysis and fraud investigation.
 
-It never signs or submits transactions. `sendTransaction`, `requestAirdrop` and friends are rejected at the tool layer. The only thing it writes is your local case files.
+Ask your agent things like:
 
-## Quick start
+- *"Profile wallet `<address>`: who funded it, where did its money go, anything suspicious?"*
+- *"Is `<mint>` a rug risk? Who actually holds the supply?"*
+- *"Trace funds out of `<address>` for 3 hops, save it to case `exchange-hack`, then export the report."*
+- *"Are these four wallets the same person?"*
+- *"Did `<wallet>` profit from `<mint>`, and who sent it tokens for free?"*
+
+It never signs or submits transactions: the raw RPC tool forwards only read methods, so `sendTransaction`, `requestAirdrop` and friends never reach the network. The only thing it writes is your local case files.
+
+Speaks the **2026-07-28** MCP revision (`server/discover`, stateless requests, cacheable `tools/list`) over stdio and Streamable HTTP, and still serves 2025-era clients. Listed in the official MCP Registry as `io.github.dennisyilmaz/coin-scout`.
+
+## Install
+
+You need a Helius API key (the free tier works) and Node.js 22.19 or newer.
+
+### Claude Desktop and other MCPB clients
+
+Download [`coin-scout.mcpb`](https://github.com/dennisyilmaz/coin-scout/releases/latest/download/coin-scout.mcpb), open it with your client and paste your Helius API key when asked. The key is stored by the client, not in the bundle.
+
+### Claude Code
 
 ```bash
-npm install
-cp .env.example .env      # put your Helius API key in HELIUS_API_KEY
-npm run build
+curl -LO https://github.com/dennisyilmaz/coin-scout/releases/latest/download/coin-scout.mjs
+node coin-scout.mjs
 ```
 
-Register with Claude Code:
+The single file is the whole server. Run interactively, it asks for your Helius key, copies itself to `~/.coin-scout/` and registers itself with `claude mcp add` at user scope. Restart Claude Code and the tools are there.
+
+### Any MCP client, from source
 
 ```bash
-claude mcp add coin-scout --scope user -- node /absolute/path/to/coin-scout/build/index.js
+git clone https://github.com/dennisyilmaz/coin-scout.git && cd coin-scout
+npm ci && npm run build
 ```
-
-Or in `claude_desktop_config.json` / any MCP client:
 
 ```json
 {
@@ -34,29 +55,25 @@ Or in `claude_desktop_config.json` / any MCP client:
 }
 ```
 
-### Share it as one file
+For Streamable HTTP instead of stdio, run `node build/http.js`. It binds `127.0.0.1:8787` only, rejects foreign `Host` headers, and serves `GET /health` with transport metrics.
+
+### Verify a download
+
+Every release is built in GitHub Actions with signed build provenance, and ships a `SHA256SUMS` file and a CycloneDX SBOM (`coin-scout.cdx.json`).
 
 ```bash
-npm run bundle        # writes build/coin-scout.mjs — the whole server, no node_modules needed
-```
-
-Send that file to someone with Node 22+ and Claude Code. They run `node coin-scout.mjs`, paste their Helius API key, restart Claude Code, and the tools are there. The file copies itself to `~/.coin-scout/` and registers itself at user scope.
-
-Streamable HTTP instead of stdio:
-
-```bash
-npm run http          # binds 127.0.0.1:8787, GET /health for metrics
+gh attestation verify coin-scout.mjs --repo dennisyilmaz/coin-scout
 ```
 
 ## Tools
 
-### Analysis (composite — start here)
+### Analysis (composite, start here)
 
 | Tool | What it answers |
 | --- | --- |
 | `analyze_wallet` | Portfolio value, holdings, wallet age, in/out flow shape, top counterparties, earliest funders, risk flags |
-| `analyze_token` | Rug screen: live mint/freeze authority, metadata mutability, supply, FDV, holder concentration (top1 / top10 / HHI), 0-100 risk score |
-| `trace_funds` | BFS fund-flow graph, forward or backward, up to 5 hops — nodes, weighted edges valued in USD at the time of each transfer, terminal sinks, circular flows. Stops at bridges and reports where the funds went |
+| `analyze_token` | Rug screen: live mint/freeze authority, metadata mutability, supply, FDV, holder concentration (top1 / top10 / HHI) with pools and other program-controlled holders flagged, 0-100 risk score |
+| `trace_funds` | BFS fund-flow graph, forward or backward, up to 5 hops: nodes, weighted edges valued in USD at the time of each transfer, terminal sinks, circular flows. Stops at bridges and reports where the funds went |
 | `follow_bridge` | Funds that left or entered Solana via Wormhole, deBridge or Mayan: other chain, recipient, amounts, destination-chain tx. Takes signatures, or an address to scan |
 | `find_cluster` | From one wallet, discovers likely co-controlled wallets: fee payers, co-signers, rent destinations, shared or sole funders, same-slot activity, creation time. Scored, with signature evidence |
 | `wallet_pnl` | Realized and unrealized PnL per token from swaps, priced at swap time. Flags sales of tokens never bought and, for one mint, who sent the tokens for free |
@@ -81,19 +98,19 @@ Pass `case: "<name>"` to `trace_funds`, `find_cluster` or `follow_bridge` to sav
 | `chain_status` | `getEpochInfo` + `getPriorityFeeEstimate` |
 | `get_balances` | DAS `getAssetsByOwner` with native balance and USD pricing |
 | `get_account` | `getMultipleAccounts` (jsonParsed) with program labelling |
-| `get_transactions` | Helius Enhanced Transactions — human-readable type, source, transfers, swap events |
+| `get_transactions` | Helius Enhanced Transactions: human-readable type, source, transfers, swap events |
 | `get_transaction_raw` | `getTransaction` with logs, inner instructions, compute units |
-| `get_transfers` | `getTransfersByAddress` — server-side counterparty / direction / mint / time filters, optional USD at the time of each transfer |
-| `get_transaction_history` | `getTransactionsForAddress` — slot, time and status filters with cursor paging |
+| `get_transfers` | `getTransfersByAddress`: server-side counterparty / direction / mint / time filters, optional USD at the time of each transfer |
+| `get_transaction_history` | `getTransactionsForAddress`: slot, time and status filters with cursor paging |
 | `get_swaps` | Enhanced history filtered to `SWAP`, normalised into sold/bought legs plus a per-mint net summary |
 | `get_token_holders` | DAS `getTokenAccounts` |
 | `get_assets` / `search_assets` / `get_asset_activity` | Full DAS surface (NFTs, cNFTs, fungibles, Token-2022) |
-| `solana_rpc` | Escape hatch for any read-only RPC or DAS method |
+| `solana_rpc` | Escape hatch for read-only RPC and DAS methods: `get*`, `is*`, `search*`, `minimumLedgerSlot`, `simulateTransaction` |
 | `server_metrics` | Batch compression, cache hit rate, adaptive rate-limit state |
 
 ### Prompts
 
-`investigate_address`, `screen_token`, `trace_stolen_funds` — each encodes an investigation order of operations.
+`investigate_address`, `screen_token`, `trace_stolen_funds`: each encodes an investigation order of operations.
 
 ## What makes it fast
 
@@ -102,9 +119,9 @@ Helius bills and rate-limits **per RPC call**, not per HTTP request, so raw para
 - **JSON-RPC micro-batching.** Calls issued within a 4 ms window are coalesced into one HTTP request. Measured on a 50-call `getTransaction` fan-out: **8 HTTP requests instead of 50, 2.2x faster wall clock.**
 - **Adaptive batch sizing.** A batch that gets 429'd is halved and the un-answered calls are requeued rather than failed; the size grows back on sustained success. Empirically the API accepts batches of 20 but rejects 50.
 - **Cost-aware adaptive rate limiting.** Request spacing scales with the *number of calls* in a request, so a 20-call batch is spaced like 20 calls. Concurrency halves and spacing doubles on each 429, then decay back. `server_metrics` reports the converged rate.
-- **HTTP/2 + keep-alive** over an `undici` pool — no TLS handshake per call.
+- **HTTP/2 + keep-alive** over an `undici` pool, so there is no TLS handshake per call.
 - **Two-tier TTL cache with in-flight coalescing.** Finalized transactions and blocks cache for hours; balances for seconds. Concurrent identical calls share one promise.
-- **Narrow payloads.** Tools return one compact JSON document rather than raw node responses — the biggest lever on agent latency is tokens, not milliseconds.
+- **Narrow payloads.** Tools return one compact JSON document rather than raw node responses. The biggest lever on agent latency is tokens, not milliseconds.
 
 ## Configuration
 
@@ -114,45 +131,45 @@ All optional except the API key. See `.env.example`.
 | --- | --- | --- |
 | `HELIUS_API_KEY` | — | Required |
 | `HELIUS_NETWORK` | `mainnet` | `mainnet` or `devnet` |
+| `HELIUS_RPC_HOST` | `<network>.helius-rpc.com` | Override the RPC host |
 | `HELIUS_MAX_CONCURRENCY` | 24 | Ceiling on in-flight HTTP requests |
+| `HELIUS_CONNECTIONS` | 64 | `undici` pool size |
 | `HELIUS_MAX_BATCH_SIZE` | 20 | Upper bound for JSON-RPC batching |
 | `HELIUS_BATCH_WINDOW_MS` | 4 | Coalescing window |
 | `HELIUS_HTTP2` | true | Disable to force HTTP/1.1 |
+| `HELIUS_TIMEOUT_MS` | 30000 | Per-request timeout |
 | `HELIUS_MAX_RETRIES` | 6 | Retries for single (non-batched) requests |
 | `HELIUS_CACHE_ENTRIES` | 20000 | LRU capacity |
 | `COIN_SCOUT_MAX_TRACE_NODES` | 400 | Hard cap on `trace_funds` graph size |
 | `COIN_SCOUT_MAX_PAGES` | 20 | Hard cap on pagination loops |
 | `COIN_SCOUT_CASES_DIR` | `~/.coin-scout/cases` | Where case files are stored |
+| `COIN_SCOUT_ENV_FILE` | `./.env`, then one directory above the server file | Explicit `.env` path |
+| `PORT` | 8787 | HTTP entry point only |
 
-## Development
+## Data and privacy
 
-Helius bills per RPC call, and `trace_funds` / `analyze_wallet` fan out to hundreds of calls each — the live scripts below spend real credits, `bench` and `validate` most of all.
+Everything runs on your machine. What leaves it:
 
-```bash
-npm run typecheck      # tsc --noEmit          — free
-npm test               # 44 unit tests         — free, no network
-npm run dev            # stdio server via tsx
-npm run verify-fixes   # ~4 calls  — regression check on get_swaps / get_asset_activity
-npm run smoke          # ~15 calls — one hit per Helius endpoint used
-npm run stdio-load     # ~30 calls — 12 concurrent tools/call over stdio
-npm run validate       # heavy     — the original 20 tools + concurrent load
-npm run bench          # heavy     — 3x50-call fan-outs, batching/cache benchmark
-```
+- **Helius** receives the addresses, signatures and mints you query, and your API key.
+- **DefiLlama** receives mint addresses and timestamps for `usdAtTime` prices.
+- **WormholeScan, deBridge and Mayan** receive transaction signatures when a bridge crossing is resolved.
 
-`scripts/e2e.ts` drives the running HTTP server through every tool over real MCP JSON-RPC:
-
-```bash
-npm run http &
-npx tsx scripts/e2e.ts
-```
+None of the last three need an API key, and your Helius key is sent only to Helius. Case files stay in your cases directory.
 
 ## Accuracy notes
 
-- Analysis tools sample recent history. When a result carries `truncated` or `sampleTruncated`, its counts are lower bounds — raise `transferSample` for more coverage.
+- Analysis tools sample recent history. When a result carries `truncated` or `sampleTruncated`, its counts are lower bounds; raise `transferSample` for more coverage.
 - Current USD values come from Helius pricing and `usdAtTime` values from DefiLlama historical prices; both cover actively traded tokens only. A missing price means unknown, not zero.
 - `wallet_pnl` only knows what the swaps in its sample show. Tokens that arrived by transfer or before the sample have no cost basis; their sales are reported as `unmatchedProceedsUsd` rather than realized PnL.
 - `find_cluster` looks one funder up from the seed. Run it again on a strong member to go further.
 - Bridge resolution covers Wormhole, deBridge and Mayan. deBridge can only be followed outbound; chains the server does not recognise are shown by raw chain id.
-- Bridge lookups send transaction signatures to WormholeScan, deBridge and Mayan; `usdAtTime` lookups send mint addresses and timestamps to DefiLlama. None of these need an API key.
-- `analyze_token` scans up to 1000 token accounts. `holderAccountsExact` tells you whether the holder count is the real total or a floor.
+- `analyze_token` scans up to 1000 token accounts. `holderAccountsExact` tells you whether the holder count is the real total or a floor. Holders whose owner is a program or a program-derived address are flagged `isProgramOwned`; concentration figures still include them, and `programControlledPct` says how much of the supply they hold.
 - Risk flags and scores are heuristics for triage. They point an investigation at the right transactions; they are not a verdict.
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the checks CI runs. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)
