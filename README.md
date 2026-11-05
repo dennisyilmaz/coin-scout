@@ -1,13 +1,46 @@
-# coin-scout
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.svg">
+    <img alt="coin-scout: Solana forensics for AI agents" src="docs/assets/hero-light.svg" width="100%">
+  </picture>
+</p>
 
-[![CI](https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/dennisyilmaz/coin-scout)](https://github.com/dennisyilmaz/coin-scout/releases/latest)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dennisyilmaz/coin-scout/badge)](https://scorecard.dev/viewer/?uri=github.com/dennisyilmaz/coin-scout)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h3 align="center">Give your AI agent a Solana forensics lab.</h3>
 
-A read-only [MCP](https://modelcontextprotocol.io) server that gives an AI agent deep, fast access to Solana on-chain data through [Helius](https://www.helius.dev), built for financial analysis and fraud investigation.
+<p align="center">
+  Trace stolen funds across hops and bridges, unmask wallet clusters run by one operator and screen tokens for rug risk, straight from a chat with Claude or any <a href="https://modelcontextprotocol.io">MCP</a> client. Read-only, powered by <a href="https://www.helius.dev">Helius</a>.
+</p>
 
-Ask your agent things like:
+<p align="center">
+  <a href="https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml"><img src="https://github.com/dennisyilmaz/coin-scout/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/dennisyilmaz/coin-scout/releases/latest"><img src="https://img.shields.io/github/v/release/dennisyilmaz/coin-scout" alt="Latest release"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/dennisyilmaz/coin-scout"><img src="https://api.scorecard.dev/projects/github.com/dennisyilmaz/coin-scout/badge" alt="OpenSSF Scorecard"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#install"><b>Install</b></a> ·
+  <a href="#what-it-can-do"><b>What it can do</b></a> ·
+  <a href="#how-it-works"><b>How it works</b></a> ·
+  <a href="#tools"><b>Tools</b></a> ·
+  <a href="#data-and-privacy"><b>Privacy</b></a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.svg" alt="An agent asks coin-scout whether BONK is a rug risk. analyze_token returns risk 5/100: mint and freeze authority renounced, top holder 9.5%, top 10 hold 39%, metadata still mutable." width="820">
+</p>
+<p align="center"><sub>Numbers from a real <code>analyze_token</code> run on BONK, 5 November 2026.</sub></p>
+
+## What it can do
+
+- **Follow the money.** `trace_funds` walks transfers forward or backward up to 5 hops, values every edge in USD at the moment it moved, and stops at Wormhole, deBridge and Mayan crossings to tell you which chain and address the funds landed on.
+- **Find the operator.** `find_cluster` mines fee payers, co-signers, rent destinations, shared funders and same-slot activity to surface wallets one actor controls, with the signatures behind every link.
+- **Screen before you buy.** `analyze_token` checks mint and freeze authority, metadata mutability and holder concentration, and tells pools and other program-controlled holders apart from real whales.
+- **See who profited.** `wallet_pnl` prices every swap at the time it happened and flags sales of tokens the wallet never bought.
+- **Build a case.** Save traces and clusters to case files, label addresses with confidence and evidence, and export a Markdown report with SVG fund-flow diagrams.
+- **Can't touch your money.** No keys, no signing. The raw RPC tool forwards only read methods, so `sendTransaction`, `requestAirdrop` and friends never reach the network. The only thing it writes is your local case files.
+
+Try asking:
 
 - *"Profile wallet `<address>`: who funded it, where did its money go, anything suspicious?"*
 - *"Is `<mint>` a rug risk? Who actually holds the supply?"*
@@ -15,17 +48,15 @@ Ask your agent things like:
 - *"Are these four wallets the same person?"*
 - *"Did `<wallet>` profit from `<mint>`, and who sent it tokens for free?"*
 
-It never signs or submits transactions: the raw RPC tool forwards only read methods, so `sendTransaction`, `requestAirdrop` and friends never reach the network. The only thing it writes is your local case files.
-
-Speaks the **2026-07-28** MCP revision (`server/discover`, stateless requests, cacheable `tools/list`) over stdio and Streamable HTTP, and still serves 2025-era clients. Listed in the official MCP Registry as `io.github.dennisyilmaz/coin-scout`.
-
 ## Install
 
-You need a Helius API key (the free tier works) and Node.js 22.19 or newer.
+You need a Helius API key (the free tier works) and Node.js 22.19 or newer. coin-scout speaks the **2026-07-28** MCP revision over stdio and Streamable HTTP, still serves 2025-era clients, and is listed in the official MCP Registry as `io.github.dennisyilmaz/coin-scout`.
 
 ### Claude Desktop and other MCPB clients
 
-Download [`coin-scout.mcpb`](https://github.com/dennisyilmaz/coin-scout/releases/latest/download/coin-scout.mcpb), open it with your client and paste your Helius API key when asked. The key is stored by the client, not in the bundle.
+<a href="https://github.com/dennisyilmaz/coin-scout/releases/latest/download/coin-scout.mcpb"><img src="https://img.shields.io/badge/Download-coin--scout.mcpb-0d9488?style=for-the-badge" alt="Download coin-scout.mcpb"></a>
+
+Open the downloaded `coin-scout.mcpb` with your client and paste your Helius API key when asked. The key is stored by the client, not in the bundle.
 
 ### Claude Code
 
@@ -65,6 +96,24 @@ Every release is built in GitHub Actions with signed build provenance, and ships
 gh attestation verify coin-scout.mjs --repo dennisyilmaz/coin-scout
 ```
 
+## How it works
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
+    <img alt="Your AI agent calls coin-scout tools; coin-scout batches, paces and caches the RPC calls and queries Helius, DefiLlama and the bridge APIs" src="docs/assets/how-it-works-light.svg" width="100%">
+  </picture>
+</p>
+
+Helius bills and rate-limits **per RPC call**, not per HTTP request, so raw parallelism just buys you 429s. The transport layer is built around that:
+
+- **JSON-RPC micro-batching.** Calls issued within a 4 ms window are coalesced into one HTTP request. Measured on a 50-call `getTransaction` fan-out: **8 HTTP requests instead of 50, 2.2x faster wall clock.**
+- **Adaptive batch sizing.** A batch that gets 429'd is halved and the un-answered calls are requeued rather than failed; the size grows back on sustained success. Empirically the API accepts batches of 20 but rejects 50.
+- **Cost-aware adaptive rate limiting.** Request spacing scales with the *number of calls* in a request, so a 20-call batch is spaced like 20 calls. Concurrency halves and spacing doubles on each 429, then decay back. `server_metrics` reports the converged rate.
+- **HTTP/2 + keep-alive** over an `undici` pool, so there is no TLS handshake per call.
+- **Two-tier TTL cache with in-flight coalescing.** Finalized transactions and blocks cache for hours; balances for seconds. Concurrent identical calls share one promise.
+- **Narrow payloads.** Tools return one compact JSON document rather than raw node responses. The biggest lever on agent latency is tokens, not milliseconds.
+
 ## Tools
 
 ### Analysis (composite, start here)
@@ -91,6 +140,11 @@ gh attestation verify coin-scout.mjs --repo dennisyilmaz/coin-scout
 
 Pass `case: "<name>"` to `trace_funds`, `find_cluster` or `follow_bridge` to save the result into that case. Labels from any case show up in every tool's `label` field, so later investigations build on earlier ones. Cases live in `~/.coin-scout/cases/<name>/` as plain JSON.
 
+<p align="center">
+  <img src="docs/assets/case-export-example.svg" alt="A fund-flow diagram from case_export: an exploited vault sends 1,240 SOL to a drainer wallet, which splits it between an exchange deposit and a Wormhole crossing to Ethereum" width="100%">
+</p>
+<p align="center"><sub>A <code>case_export</code> diagram, drawn by coin-scout's own renderer. Illustrative data.</sub></p>
+
 ### Data access
 
 | Tool | Backed by |
@@ -111,17 +165,6 @@ Pass `case: "<name>"` to `trace_funds`, `find_cluster` or `follow_bridge` to sav
 ### Prompts
 
 `investigate_address`, `screen_token`, `trace_stolen_funds`: each encodes an investigation order of operations.
-
-## What makes it fast
-
-Helius bills and rate-limits **per RPC call**, not per HTTP request, so raw parallelism just buys you 429s. The transport layer is built around that:
-
-- **JSON-RPC micro-batching.** Calls issued within a 4 ms window are coalesced into one HTTP request. Measured on a 50-call `getTransaction` fan-out: **8 HTTP requests instead of 50, 2.2x faster wall clock.**
-- **Adaptive batch sizing.** A batch that gets 429'd is halved and the un-answered calls are requeued rather than failed; the size grows back on sustained success. Empirically the API accepts batches of 20 but rejects 50.
-- **Cost-aware adaptive rate limiting.** Request spacing scales with the *number of calls* in a request, so a 20-call batch is spaced like 20 calls. Concurrency halves and spacing doubles on each 429, then decay back. `server_metrics` reports the converged rate.
-- **HTTP/2 + keep-alive** over an `undici` pool, so there is no TLS handshake per call.
-- **Two-tier TTL cache with in-flight coalescing.** Finalized transactions and blocks cache for hours; balances for seconds. Concurrent identical calls share one promise.
-- **Narrow payloads.** Tools return one compact JSON document rather than raw node responses. The biggest lever on agent latency is tokens, not milliseconds.
 
 ## Configuration
 
