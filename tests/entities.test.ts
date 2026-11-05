@@ -59,11 +59,20 @@ describe("deposit sweep heuristic", () => {
     expect(sweepPattern(DEPOSIT, [transfer(USER, DEPOSIT)])).toBeNull();
   });
 
-  it("names the exchange when the sweep target is a known exchange wallet", () => {
+  it("calls an address sweeping into an exchange hot wallet that exchange's deposit address", () => {
     const pattern = sweepPattern(DEPOSIT, [transfer(DEPOSIT, OKX_WALLET), transfer(DEPOSIT, OKX_WALLET)])!;
-    const verdict = classifyDeposit(pattern, { entity: knownEntity(OKX_WALLET), senders: null, sampled: 0 });
+    const verdict = classifyDeposit(pattern, { entity: knownEntity(OKX_WALLET), senders: 60, sampled: 100 });
     expect(verdict?.deposit).toMatchObject({ name: "OKX", kind: "exchange_deposit", confidence: "high" });
     expect(verdict?.hotWallet).toBeNull();
+  });
+
+  it("does not claim exchange ownership of a wallet paying into an exchange deposit address", () => {
+    const pattern = sweepPattern(USER, [transfer(USER, OKX_WALLET)])!;
+    for (const senders of [2, null]) {
+      const deposit = classifyDeposit(pattern, { entity: knownEntity(OKX_WALLET), senders, sampled: 100 })!.deposit;
+      expect(deposit).toMatchObject({ name: "OKX", kind: "exchange_user", counterparty: OKX_WALLET });
+      expect(describeEntity(deposit)).toBe("sends its funds to OKX address CBEA…bkVG");
+    }
   });
 
   it("needs repeated sweeps into heavy fan-in before calling an unknown target a hot wallet", () => {
@@ -101,10 +110,16 @@ describe("Helius identity", () => {
   });
 
   it("combines built-in labels with deposit detection", async () => {
+    const fanIn = Array.from({ length: 40 }, (_, i) => transfer(wallet(500 + i), OKX_WALLET));
     const api = {
       client: { restPost: async () => [] },
-      getTransfersByAddress: async ({ address }: { address: string }) => ({
-        data: address === DEPOSIT ? [transfer(DEPOSIT, OKX_WALLET), transfer(DEPOSIT, OKX_WALLET)] : [],
+      getTransfersByAddress: async ({ address, direction }: { address: string; direction: string }) => ({
+        data:
+          address === DEPOSIT && direction === "out"
+            ? [transfer(DEPOSIT, OKX_WALLET), transfer(DEPOSIT, OKX_WALLET)]
+            : address === OKX_WALLET && direction === "in"
+              ? fanIn
+              : [],
         paginationToken: null,
       }),
     } as unknown as HeliusApi;

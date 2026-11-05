@@ -158,10 +158,11 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
     }
 
     frontier = pool
+      .filter(([address]) => !knownEntity(address))
       .slice(0, options.branchFactor)
       .map(([address]) => address)
       .filter((address) => {
-        if (visited.size >= options.maxNodes || knownEntity(address)) return false;
+        if (visited.size >= options.maxNodes) return false;
         visited.add(address);
         hopOf.set(address, hop);
         return true;
@@ -187,7 +188,7 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
   const feeders = forward
     ? edgeList.filter((e) => knownEntity(e.to) && e.from !== options.root).map((e) => e.from)
     : [];
-  const { entities, notes: entityNotes } = await identifyEntities(
+  const { entities } = await identifyEntities(
     api,
     [...new Set([...feeders, ...terminals.map((t) => t.address)])],
     { deposits: forward },
@@ -223,7 +224,6 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
     bridgeCrossings: crossings.resolved,
     unresolvedBridgeTxs: crossings.unresolved,
     terminals: terminals.map(withEntity),
-    entityNotes,
     cycles: findCycles(edgeList, options.root),
     nodesShown: Math.min(nodes.length, options.maxNodesShown),
     edgesShown: shownEdges.length,
