@@ -7,9 +7,10 @@ import { OKX_SNAPSHOT, OKX_SOLANA } from "./okx-solana.js";
 
 export interface Entity {
   name: string;
-  kind: "exchange" | "exchange_deposit" | "hot_wallet" | "identity";
+  kind: "exchange" | "exchange_deposit" | "exchange_user" | "hot_wallet" | "identity";
   confidence: "established" | "high" | "medium" | "low";
   source: string;
+  counterparty?: string;
   evidence?: string[];
 }
 
@@ -37,6 +38,9 @@ export function describeEntity(entity: Entity): string {
   if (entity.kind === "exchange") return `${entity.name} wallet (proof of reserves)`;
   if (entity.kind === "exchange_deposit") {
     return unknown ? "likely deposit or collection address (unidentified exchange or service)" : `likely ${entity.name} deposit address`;
+  }
+  if (entity.kind === "exchange_user" && entity.counterparty) {
+    return `sends its funds to ${entity.name} address ${entity.counterparty.slice(0, 4)}…${entity.counterparty.slice(-4)}`;
   }
   if (entity.kind === "hot_wallet") return unknown ? "likely hot wallet (unidentified exchange or service)" : `likely ${entity.name} hot wallet`;
   return entity.name;
@@ -120,14 +124,26 @@ export function classifyDeposit(
   const evidence = [pattern.sampleSig];
   const swept = `${pattern.sweeps} of its ${pattern.outgoing} recent outgoing transfers went to ${pattern.target}`;
   if (target.entity?.kind === "exchange") {
+    const name = target.entity.name;
+    const hot = target.senders !== null && target.senders >= HOT_WALLET_SENDERS;
+    const fanIn = target.senders === null ? "" : `, ${target.senders} distinct senders in its last ${target.sampled} inbound transfers`;
     return {
-      deposit: {
-        name: target.entity.name,
-        kind: "exchange_deposit",
-        confidence: pattern.sweeps >= 2 ? "high" : "medium",
-        source: `sweep pattern: ${swept} (${target.entity.name} wallet)`,
-        evidence,
-      },
+      deposit: hot
+        ? {
+            name,
+            kind: "exchange_deposit",
+            confidence: pattern.sweeps >= 2 ? "high" : "medium",
+            source: `sweep pattern: ${swept} (${name} wallet${fanIn})`,
+            evidence,
+          }
+        : {
+            name,
+            kind: "exchange_user",
+            confidence: "medium",
+            source: `${swept} (${name} wallet${fanIn}). That wallet is likely this sender's ${name} deposit address, the one to ask ${name} about`,
+            counterparty: pattern.target,
+            evidence,
+          },
       hotWallet: null,
     };
   }
@@ -167,11 +183,10 @@ export async function detectDeposits(
     )
   ).filter((p): p is SweepPattern => p !== null);
 
-  const targets = [...new Set(patterns.map((p) => p.target))];
-  const unknown = targets.filter((t) => !knownEntity(t)).slice(0, MAX_TARGET_CHECKS);
+  const targets = [...new Set(patterns.map((p) => p.target))].slice(0, MAX_TARGET_CHECKS);
   const fanIn = new Map<string, { senders: number; sampled: number }>();
   await Promise.all(
-    unknown.map((target) =>
+    targets.map((target) =>
       api
         .getTransfersByAddress({ address: target, direction: "in", sortOrder: "desc", limit: 100 })
         .then((page) => {

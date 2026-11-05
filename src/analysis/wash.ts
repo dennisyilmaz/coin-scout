@@ -432,7 +432,7 @@ export async function detectWashTrading(
     const program = programs[i];
     return {
       ...pool,
-      label: pool.label?.startsWith("Raydium") || !program || !PROGRAM_LABELS[program] ? pool.label : `${PROGRAM_LABELS[program]} pool`,
+      label: POOL_AUTHORITIES[pool.owner] ?? (program && DEX_PROGRAMS.has(program) ? `${PROGRAM_LABELS[program]} pool` : pool.label),
       transfersRead: pages[i].transfers.length,
       truncated: pages[i].truncated,
       from: times.length ? iso(Math.min(...times)) : null,
