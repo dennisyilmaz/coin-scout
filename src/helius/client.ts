@@ -32,6 +32,7 @@ export class HeliusError extends Error {
 
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const RETRYABLE_RPC_CODES = new Set([-32603, -32005, -32004, -32002]);
+const RPC_ERROR_RETRIES = 2;
 
 export class HeliusClient {
   private readonly pool: Pool;
@@ -195,23 +196,20 @@ export class HeliusClient {
     timeoutMs?: number,
   ): Promise<RpcEnvelope[]> {
     const body = JSON.stringify(payload);
-    const raw = await this.httpRequest(this.config.rpcPath, body, label, cost, timeoutMs);
-    const parsed = JSON.parse(raw) as RpcEnvelope | RpcEnvelope[];
-    const envelopes = Array.isArray(parsed) ? parsed : [parsed];
-    if (cost > 1) this.growBatch();
+    for (let attempt = 0; ; attempt++) {
+      const raw = await this.httpRequest(this.config.rpcPath, body, label, cost, timeoutMs);
+      const parsed = JSON.parse(raw) as RpcEnvelope | RpcEnvelope[];
+      const envelopes = Array.isArray(parsed) ? parsed : [parsed];
+      if (cost > 1) this.growBatch();
 
-    const retryableRpc = envelopes.find(
-      (e) => e.error && RETRYABLE_RPC_CODES.has(Number(e.error.code)),
-    );
-    if (retryableRpc && envelopes.length === 1) {
-      throw new HeliusError(
-        retryableRpc.error!.message,
-        retryableRpc.error!.code,
-        label,
-        retryableRpc.error!.data,
-      );
+      const error = envelopes.length === 1 ? envelopes[0].error : undefined;
+      if (!error || !RETRYABLE_RPC_CODES.has(Number(error.code))) return envelopes;
+      if (attempt >= RPC_ERROR_RETRIES) {
+        throw new HeliusError(error.message, error.code, label, error.data);
+      }
+      this.retryCount++;
+      await sleep(250 * 2 ** attempt + Math.random() * 120);
     }
-    return envelopes;
   }
 
   private async httpRequest(

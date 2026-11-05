@@ -145,8 +145,10 @@ export function caseLabelOf(address: string): string | undefined {
   return hit ? `${hit.label} [case: ${hit.caseName}]` : undefined;
 }
 
-export function findAddress(address: string) {
+export function findAddress(address: string, caseName?: string) {
+  const only = caseName ? slugify(caseName) : null;
   return listCases()
+    .filter((c) => !only || c.name === only)
     .map((c) => ({
       case: c.name,
       label: c.labels[address] ?? null,

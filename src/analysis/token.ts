@@ -1,8 +1,10 @@
 import type { HeliusApi } from "../helius/api.js";
 import { herfindahl, num, pct, round } from "../util/format.js";
+import { isOffCurve } from "../util/curve.js";
 import { BURN_ADDRESSES, labelOf } from "../util/programs.js";
 
 const HOLDER_SCAN_LIMIT = 1000;
+const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 export interface TokenReport {
   mint: string;
@@ -77,15 +79,18 @@ export async function analyzeToken(
     const owner = ownerAddresses[index] ?? null;
     const program = owner ? (ownerProgram.get(owner) ?? null) : null;
     const amount = num(account.uiAmountString ?? account.uiAmount);
+    const programAccount = program !== null && program !== SYSTEM_PROGRAM;
     return {
       tokenAccount: account.address,
       owner,
       ownerProgram: program,
-      ownerLabel: owner ? (labelOf(owner) ?? (program ? (labelOf(program) ?? null) : null)) : null,
+      ownerLabel: owner
+        ? (labelOf(owner) ?? (programAccount ? (labelOf(program) ?? null) : null))
+        : null,
       amount: round(amount, 6),
       supplyPct: pct(amount, totalSupply),
       isBurn: owner ? BURN_ADDRESSES.has(owner) : false,
-      isProgramOwned: program !== null && program !== "11111111111111111111111111111111",
+      isProgramOwned: owner !== null && (programAccount || isOffCurve(owner)),
     };
   });
 
@@ -105,6 +110,14 @@ export async function analyzeToken(
         3,
       )
     : null;
+  const programControlledPct = known
+    ? round(
+        circulating.filter((h) => h.isProgramOwned).reduce((acc, h) => acc + h.supplyPct, 0),
+        3,
+      )
+    : null;
+  const topIsProgram = circulating[0]?.isProgramOwned ?? false;
+  const topNote = topIsProgram ? " (a program-controlled account: pool, vault or lock — check which)" : "";
   const burnedPct = known
     ? round(
         topHolders.filter((h) => h.isBurn).reduce((acc, h) => acc + h.supplyPct, 0),
@@ -140,10 +153,10 @@ export async function analyzeToken(
       `concentration_unknown: holder distribution could not be measured (${concentrationError ?? "no top-holder data"}) — treat top1/top10 as unmeasured, not low`,
     );
   } else if (top1 >= 50) {
-    flags.push(`extreme_concentration: largest non-burn holder controls ${top1}% of supply`);
+    flags.push(`extreme_concentration: largest non-burn holder controls ${top1}% of supply${topNote}`);
     score += 25;
   } else if (top1 >= 20) {
-    flags.push(`high_concentration: largest non-burn holder controls ${top1}% of supply`);
+    flags.push(`high_concentration: largest non-burn holder controls ${top1}% of supply${topNote}`);
     score += 12;
   }
   if (top10 !== null && top10 >= 80) {
@@ -170,7 +183,7 @@ export async function analyzeToken(
   const programOwnedTop = circulating.filter((h) => h.isProgramOwned).length;
   if (programOwnedTop > 0) {
     flags.push(
-      `${programOwnedTop} of the top holders are program-owned accounts (likely AMM pools or vaults, not individuals)`,
+      `program_controlled_holders: ${programOwnedTop} of the top holders (${programControlledPct}% of supply) are owned by programs or PDAs — likely AMM pools, vaults or locks, not individuals`,
     );
   }
 
@@ -209,6 +222,7 @@ export async function analyzeToken(
       top1Pct: top1,
       top10Pct: top10,
       top20Pct: top20,
+      programControlledPct,
       hhiTop20: known ? herfindahl(circulating.slice(0, 20).map((h) => h.amount)) : null,
       sampledHolders: topHolders.length,
     },

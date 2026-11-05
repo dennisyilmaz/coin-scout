@@ -57,6 +57,10 @@ describe("case store", () => {
     expect(hits.map((h) => h.case).sort()).toEqual(["example-case", "other-case"]);
     expect(findAddress(ROOT)[0].notes).toHaveLength(1);
   });
+
+  it("narrows an address search to one case by its display name", () => {
+    expect(findAddress(SINK, "Other Case").map((h) => h.case)).toEqual(["other-case"]);
+  });
 });
 
 describe("cell", () => {
