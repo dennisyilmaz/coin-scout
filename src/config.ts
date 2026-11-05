@@ -33,6 +33,11 @@ function envBool(name: string, fallback: boolean): boolean {
   return raw === "1" || raw.toLowerCase() === "true";
 }
 
+function optionalSecret(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value && !value.startsWith("${") ? value : null;
+}
+
 export interface Config {
   apiKey: string;
   network: Network;
@@ -49,6 +54,7 @@ export interface Config {
   maxTraceNodes: number;
   maxPageFetch: number;
   casesDir: string;
+  etherscanApiKey: string | null;
 }
 
 export function loadConfig(): Config {
@@ -81,6 +87,7 @@ export function loadConfig(): Config {
     maxTraceNodes: envInt("COIN_SCOUT_MAX_TRACE_NODES", 400),
     maxPageFetch: envInt("COIN_SCOUT_MAX_PAGES", 20),
     casesDir: resolve(process.env.COIN_SCOUT_CASES_DIR?.trim() || join(homedir(), ".coin-scout", "cases")),
+    etherscanApiKey: optionalSecret("ETHERSCAN_API_KEY"),
   };
 }
 

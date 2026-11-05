@@ -4,7 +4,7 @@ import { num, round } from "../util/format.js";
 import { HttpError, getJson } from "../util/http.js";
 import { TTL } from "../util/cache.js";
 
-export type BridgeName = "wormhole" | "debridge" | "mayan";
+export type BridgeName = "wormhole" | "debridge" | "mayan" | "cctp";
 
 export const BRIDGE_PROGRAMS: Record<string, BridgeName> = {
   wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb: "wormhole",
@@ -14,7 +14,25 @@ export const BRIDGE_PROGRAMS: Record<string, BridgeName> = {
   DEbrdGj3HsRsAzx6uH4MKyREKxVAfBydijLUF3ygsFfh: "debridge",
   BLZRi6frs4X4DNLw56V4EXai1b6QVESN1BhHBTYM9VcY: "mayan",
   FC4eXxkyrMPTjiYUpp4EAnkmwMbQyZ6NDCh1kfLn6vsf: "mayan",
+  CCTPiPYPc6AsJuwueEnWgSgucamXDZwBd53dQ11YiKX3: "cctp",
+  CCTPmbSD7gX1bxKPAmg77w8oFzNFpaQiQUWD43TKaecd: "cctp",
+  CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe: "cctp",
+  CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC: "cctp",
 };
+
+const CCTP_DOMAINS: Record<number, string> = {
+  0: "Ethereum",
+  1: "Avalanche",
+  2: "Optimism",
+  3: "Arbitrum",
+  5: "Solana",
+  6: "Base",
+  7: "Polygon",
+  10: "Unichain",
+  11: "Linea",
+};
+const CCTP_SOLANA = 5;
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 const WORMHOLE_CHAINS: Record<number, string> = {
   1: "Solana",
@@ -99,13 +117,14 @@ export async function resolveBridgeTx(
     }
   };
 
-  const [mayan, debridge, wormhole] = await Promise.all([
+  const [mayan, debridge, wormhole, cctp] = await Promise.all([
     bridges.includes("mayan") ? attempt("mayan", () => resolveMayan(signature)) : [],
     bridges.includes("debridge") ? attempt("debridge", () => resolveDebridge(signature)) : [],
     bridges.includes("wormhole") ? attempt("wormhole", () => resolveWormhole(signature)) : [],
+    bridges.includes("cctp") ? attempt("cctp", () => resolveCctp(signature)) : [],
   ]);
 
-  const hops = [...mayan, ...debridge, ...(mayan.length ? [] : wormhole)];
+  const hops = [...mayan, ...debridge, ...(mayan.length ? [] : wormhole), ...(mayan.length || wormhole.length ? [] : cctp)];
   return { hops, errors };
 }
 
@@ -155,6 +174,55 @@ async function resolveMayan(signature: string): Promise<BridgeHop[]> {
     { ttlMs: TTL.asset },
   );
   return record?.sourceChain ? [normalizeMayan(record, signature)] : [];
+}
+
+async function resolveCctp(signature: string): Promise<BridgeHop[]> {
+  const body = await getJson<{ messages?: CctpMessage[] }>(
+    `https://iris-api.circle.com/v2/messages/${CCTP_SOLANA}?transactionHash=${signature}`,
+    { ttlMs: TTL.asset },
+  );
+  return (body.messages ?? []).filter((m) => m.decodedMessage).map((m) => normalizeCctp(m, signature));
+}
+
+export interface CctpMessage {
+  status?: string;
+  destinationMintTxHash?: string | null;
+  decodedMessage?: {
+    sourceDomain?: string;
+    destinationDomain?: string;
+    decodedMessageBody?: {
+      burnToken?: string;
+      mintRecipient?: string;
+      amount?: string;
+      messageSender?: string;
+      feeExecuted?: string | null;
+    } | null;
+  } | null;
+}
+
+export function normalizeCctp(message: CctpMessage, signature: string): BridgeHop {
+  const decoded = message.decodedMessage ?? {};
+  const body = decoded.decodedMessageBody ?? {};
+  const toId = num(decoded.destinationDomain);
+  const sent = scaled(body.amount ?? null, 6);
+  const fee = scaled(body.feeExecuted ?? "0", 6) ?? 0;
+  const usdc = body.burnToken === USDC_MINT;
+  return {
+    bridge: "cctp",
+    signature,
+    direction: num(decoded.sourceDomain) === CCTP_SOLANA ? "out" : "unknown",
+    status: message.status ?? null,
+    fromChain: chainName(CCTP_DOMAINS, num(decoded.sourceDomain), "cctp"),
+    fromAddress: body.messageSender ?? null,
+    toChain: chainName(CCTP_DOMAINS, toId, "cctp"),
+    toAddress: body.mintRecipient ?? null,
+    sent: { token: usdc ? "USDC" : (body.burnToken ?? null), amount: sent },
+    received: { token: usdc ? "USDC" : null, amount: sent === null ? null : round(sent - fee, 6) },
+    usd: usdc ? sent : null,
+    sourceTx: signature,
+    destinationTx: message.destinationMintTxHash ?? null,
+    explorer: `https://iris-api.circle.com/v2/messages/${CCTP_SOLANA}?transactionHash=${signature}`,
+  };
 }
 
 export interface WormholeOperation {

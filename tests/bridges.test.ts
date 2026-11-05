@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bridgesIn,
+  normalizeCctp,
   normalizeDebridge,
   normalizeMayan,
   normalizeWormhole,
@@ -141,5 +142,46 @@ describe("normalizers", () => {
       destinationTx: "DstTx",
       received: { token: "SOL", amount: 10 },
     });
+  });
+});
+
+describe("normalizeCctp", () => {
+  it("reads a Circle CCTP V2 burn from Solana to Ethereum", () => {
+    const hop = normalizeCctp(
+      {
+        status: "complete",
+        destinationMintTxHash: "0x3f78c9d3dcbdc40c156af341b3fbaa14fce5bc1c98f90589d0f6484acaf06435",
+        decodedMessage: {
+          sourceDomain: "5",
+          destinationDomain: "0",
+          decodedMessageBody: {
+            burnToken: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            mintRecipient: "0x75cb58a216bac366343bfc7206ca51ce0cf3190f",
+            amount: "91063989",
+            messageSender: "BS4w5VvipvRshWL1U63sLaBwwET9M16CWGxyVhiGxLKB",
+            feeExecuted: "0",
+          },
+        },
+      },
+      SIG,
+    );
+    expect(hop).toMatchObject({
+      bridge: "cctp",
+      direction: "out",
+      fromChain: "Solana",
+      fromAddress: "BS4w5VvipvRshWL1U63sLaBwwET9M16CWGxyVhiGxLKB",
+      toChain: "Ethereum",
+      toAddress: "0x75cb58a216bac366343bfc7206ca51ce0cf3190f",
+      sent: { token: "USDC", amount: 91.063989 },
+      usd: 91.063989,
+      destinationTx: "0x3f78c9d3dcbdc40c156af341b3fbaa14fce5bc1c98f90589d0f6484acaf06435",
+    });
+  });
+
+  it("detects CCTP programs", () => {
+    const tx = {
+      instructions: [{ programId: "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe", data: "", accounts: [] }],
+    } as unknown as EnhancedTransaction;
+    expect(bridgesIn(tx)).toEqual(["cctp"]);
   });
 });

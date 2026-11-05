@@ -6,6 +6,7 @@ import { registerDataTools } from "./tools/data.js";
 import { registerAnalysisTools } from "./tools/analysis.js";
 import { registerPrompts } from "./tools/prompts.js";
 import { registerCaseTools } from "./tools/cases.js";
+import { registerForensicsTools } from "./tools/forensics.js";
 import { initCases } from "./cases/store.js";
 import { VERSION } from "./version.js";
 
@@ -16,7 +17,9 @@ Routing guide:
 - "Where did the money go / come from" -> trace_funds (direction out / in).
 - Token safety, rug risk, holder concentration -> analyze_token.
 - "Are these the same person" -> compare_wallets. "Who else does this wallet control" -> find_cluster.
-- Funds left Solana or arrived from another chain -> follow_bridge. trace_funds resolves bridge crossings it meets.
+- Funds left Solana or arrived from another chain -> follow_bridge. trace_funds resolves bridge crossings it meets; pass followEvm to keep tracing on the EVM side, or call trace_evm.
+- Who owns an address (exchange, deposit address, hot wallet) -> identify_addresses. trace_funds labels its terminals the same way.
+- Fake volume, bots trading with themselves -> detect_wash_trading.
 - Profit, cost basis, "did this wallet profit from the rug" -> wallet_pnl (pass mint for one token).
 - One signature to understand -> investigate_transaction, or get_transactions for a plain parse.
 - Movement of value with filters (counterparty, mint, direction, time) -> get_transfers. Prefer it over paging signatures.
@@ -53,6 +56,7 @@ export function buildMcpServer(runtime: Runtime): McpServer {
   const ctx = { server, api: runtime.api, config: runtime.config };
   registerDataTools(ctx);
   registerAnalysisTools(ctx);
+  registerForensicsTools(ctx);
   registerCaseTools(ctx);
   registerPrompts(ctx);
   return server;

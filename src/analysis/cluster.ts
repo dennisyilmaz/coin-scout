@@ -2,6 +2,7 @@ import type { HeliusApi, RawTransaction } from "../helius/api.js";
 import type { SignatureInfo } from "../helius/types.js";
 import { iso, round } from "../util/format.js";
 import { PROGRAM_LABELS, labelOf } from "../util/programs.js";
+import { knownEntity } from "../labels/entities.js";
 import { BRIDGE_PROGRAMS } from "./bridges.js";
 import { SOL_ALIASES } from "./prices.js";
 import { amountOf, fetchTransfers } from "./transfers.js";
@@ -64,7 +65,8 @@ export class CandidateSet {
       !address ||
       this.exclude.has(address) ||
       PROGRAM_LABELS[address] ||
-      BRIDGE_PROGRAMS[address]
+      BRIDGE_PROGRAMS[address] ||
+      knownEntity(address)
     )
       return;
     let signals = this.map.get(address);

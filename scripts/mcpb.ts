@@ -57,6 +57,9 @@ const manifest = {
     "https://wormhole.com/pages/data-protection-and-privacy-policy",
     "https://app.debridge.finance/assets/files/debridge_privacy_policy.pdf",
     "https://mayan.finance/privacy-policy",
+    "https://www.circle.com/legal/privacy-policy",
+    "https://docs.dexscreener.com/privacy/privacy-policy",
+    "https://eaas.blockscout.com/privacy-notice",
   ],
   server: {
     type: "node",
@@ -64,7 +67,10 @@ const manifest = {
     mcp_config: {
       command: "node",
       args: ["${__dirname}/server/coin-scout.mjs"],
-      env: { HELIUS_API_KEY: "${user_config.helius_api_key}" },
+      env: {
+        HELIUS_API_KEY: "${user_config.helius_api_key}",
+        ETHERSCAN_API_KEY: "${user_config.etherscan_api_key}",
+      },
     },
   },
   user_config: {
@@ -74,6 +80,13 @@ const manifest = {
       description: "Free at https://www.helius.dev. Sent only to Helius.",
       sensitive: true,
       required: true,
+    },
+    etherscan_api_key: {
+      type: "string",
+      title: "Etherscan API key (optional)",
+      description: "Free at https://etherscan.io/apis. Lets EVM tracing cover chains beyond Ethereum. Sent only to Etherscan.",
+      sensitive: true,
+      required: false,
     },
   },
   tools: tools.map(({ name, description }) => ({ name, description })),
@@ -110,6 +123,12 @@ const server = {
           name: "HELIUS_API_KEY",
           description: "Helius API key, free at https://www.helius.dev",
           isRequired: true,
+          isSecret: true,
+        },
+        {
+          name: "ETHERSCAN_API_KEY",
+          description: "Optional Etherscan API key for EVM tracing beyond Ethereum, free at https://etherscan.io/apis",
+          isRequired: false,
           isSecret: true,
         },
       ],
