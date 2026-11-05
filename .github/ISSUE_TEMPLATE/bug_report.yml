@@ -1,0 +1,42 @@
+name: Bug report
+description: A tool returned something wrong, failed, or the server would not start
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste your Helius API key. Issues are public: leave out addresses or details from an investigation you need to keep private.
+  - type: input
+    id: version
+    attributes:
+      label: coin-scout version
+      description: The release tag, or the commit if you built from source
+      placeholder: v0.2.0
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Code 2.x, Claude Desktop, ...
+  - type: textarea
+    id: call
+    attributes:
+      label: Tool and arguments
+      description: The tool name and the arguments it was called with
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The output or error, trimmed to the relevant part
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
