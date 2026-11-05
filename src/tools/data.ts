@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertPubkey, assertSignature } from "../util/base58.js";
-import { LAMPORTS_PER_SOL, iso, json, num, round } from "../util/format.js";
+import { LAMPORTS_PER_SOL, fail, iso, json, num, round } from "../util/format.js";
 import { labelOf } from "../util/programs.js";
 import { fetchTransfers, slimTransfer } from "../analysis/transfers.js";
 import { historicalPrices } from "../analysis/prices.js";
@@ -19,7 +19,7 @@ export function registerDataTools(ctx: ToolContext): void {
       title: "Chain status",
       description:
         "Current Solana slot, epoch, block height and recommended priority fee. Cheap orientation call — use it to anchor timestamps and confirm the RPC is healthy.",
-      inputSchema: z.object({}),
+      inputSchema: z.strictObject({}),
       annotations: READ_ONLY,
     },
     safe(async () => {
@@ -545,7 +545,7 @@ export function registerDataTools(ctx: ToolContext): void {
     {
       title: "Raw Solana RPC (read-only)",
       description:
-        "Escape hatch: call any read-only Solana JSON-RPC or Helius DAS method directly when no dedicated tool fits. Write methods (sendTransaction, requestAirdrop) are rejected.",
+        "Escape hatch: call any read-only Solana JSON-RPC or Helius DAS method directly when no dedicated tool fits. Only get*, is*, search*, minimumLedgerSlot and simulateTransaction are forwarded; anything that could submit or sign (sendTransaction, requestAirdrop, sendBundle) is rejected.",
       inputSchema: z.object({
         method: z.string().describe("e.g. getProgramAccounts, getInflationReward, getVoteAccounts"),
         params: z
@@ -556,10 +556,10 @@ export function registerDataTools(ctx: ToolContext): void {
       annotations: READ_ONLY,
     },
     safe(async ({ method, params }) => {
-      if (BLOCKED_METHODS.has(method)) {
-        return json({
-          error: `Method ${method} is blocked: coin-scout is read-only and never submits transactions.`,
-        });
+      if (!isReadOnlyMethod(method)) {
+        return fail(
+          `Method ${method} is blocked: coin-scout is read-only and only forwards get*, is*, search*, minimumLedgerSlot and simulateTransaction.`,
+        );
       }
       const result = await api.client.rpc<unknown>(method, params, {
         ttlMs: 0,
@@ -575,7 +575,7 @@ export function registerDataTools(ctx: ToolContext): void {
       title: "Server metrics",
       description:
         "coin-scout transport stats: HTTP requests issued, JSON-RPC batch compression, retries, cache hit rate and adaptive rate-limit state. Use to explain slow responses or confirm caching is working.",
-      inputSchema: z.object({}),
+      inputSchema: z.strictObject({}),
       annotations: READ_ONLY,
     },
     safe(async () =>
@@ -589,9 +589,8 @@ export function registerDataTools(ctx: ToolContext): void {
   );
 }
 
-const BLOCKED_METHODS = new Set([
-  "sendTransaction",
-  "requestAirdrop",
-  "sendBundle",
-  "signTransaction",
-]);
+const READ_ONLY_EXTRAS = new Set(["minimumLedgerSlot", "simulateTransaction"]);
+
+export function isReadOnlyMethod(method: string): boolean {
+  return /^(get|is|search)[A-Z][A-Za-z0-9]*$/.test(method) || READ_ONLY_EXTRAS.has(method);
+}

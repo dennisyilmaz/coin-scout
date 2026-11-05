@@ -1,6 +1,8 @@
 import { loadConfig } from "../src/config.js";
 import { HeliusClient } from "../src/helius/client.js";
 import { HeliusApi } from "../src/helius/api.js";
+import { BRIDGE_PROGRAMS } from "../src/analysis/bridges.js";
+import { BURN_ADDRESSES, PROGRAM_LABELS } from "../src/util/programs.js";
 
 const JUP = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
 const BONK = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
@@ -85,7 +87,7 @@ await timed("getTokenLargestAccounts", async () => {
 
 await timed("getDasTokenAccounts", async () => {
   const res = await api.getDasTokenAccounts({ mint: BONK, limit: 5 });
-  console.log(`     -> ${res.items?.length ?? 0} accounts of ${res.total}`);
+  console.log(`     -> ${res.token_accounts?.length ?? 0} accounts of ${res.total}`);
   return res;
 });
 
@@ -96,6 +98,16 @@ await timed("getPriorityFeeEstimate", async () => {
   });
   console.log(`     -> medium=${res.priorityFeeLevels?.medium}`);
   return res;
+});
+
+await timed("program labels point at executable programs", async () => {
+  const ids = [...new Set([...Object.keys(PROGRAM_LABELS), ...Object.keys(BRIDGE_PROGRAMS)])].filter(
+    (id) => !id.startsWith("Sysvar") && !BURN_ADDRESSES.has(id),
+  );
+  const res = await api.getMultipleAccounts(ids, "base64");
+  const wrong = ids.filter((_, i) => !res.value[i]?.executable);
+  if (wrong.length) throw new Error(`not executable: ${wrong.join(", ")}`);
+  console.log(`     -> ${ids.length} labels verified`);
 });
 
 console.log("\nmetrics:", JSON.stringify(client.metrics(), null, 2));

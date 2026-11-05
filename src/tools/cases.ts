@@ -108,7 +108,7 @@ export function registerCaseTools({ server }: ToolContext): void {
     safe(async ({ case: name, address, artifactId }) => {
       if (address) {
         assertPubkey(address);
-        const hits = findAddress(address).filter((hit) => !name || hit.case === name);
+        const hits = findAddress(address, name);
         return json({ address, cases: hits.length, hits });
       }
 

@@ -1,4 +1,4 @@
-const url = process.env.MCP_URL ?? "http://127.0.0.1:8791/";
+const url = process.env.MCP_URL ?? "http://127.0.0.1:8787/";
 
 const META = {
   "io.modelcontextprotocol/protocolVersion": "2026-07-28",
@@ -14,6 +14,7 @@ async function rpc(method: string, params: Record<string, unknown>, name?: strin
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
+    "MCP-Protocol-Version": "2026-07-28",
     "Mcp-Method": method,
   };
   if (name) headers["Mcp-Name"] = name;
