@@ -1,14 +1,14 @@
 {
   "name": "coin-scout",
   "version": "0.0.0-development",
-  "description": "Blazing-fast read-only MCP server exposing Helius Solana data for financial analysis and fraud investigation",
+  "description": "Read-only Solana MCP server for on-chain analysis and fraud investigation, backed by Helius",
   "type": "module",
   "bin": {
     "coin-scout": "./build/index.js"
   },
   "main": "./build/index.js",
   "files": [
-    "build"
+    "build/**/*.js"
   ],
   "engines": {
     "node": ">=22.19"
@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",
     "bundle": "esbuild src/standalone.ts --bundle --platform=node --format=esm --target=node22 --outfile=build/coin-scout.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\"",
+    "mcpb": "tsx scripts/mcpb.ts",
     "dev": "tsx src/index.ts",
     "http": "tsx src/http.ts",
     "smoke": "tsx scripts/smoke.ts",
