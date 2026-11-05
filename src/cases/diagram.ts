@@ -54,32 +54,49 @@ export function renderSvg(graph: Graph): string {
   const height = TOP + rows * (NODE_H + ROW_GAP) + PAD;
   const maxWeight = Math.max(1, ...graph.edges.map((e) => e.weight));
 
-  const edges = graph.edges
-    .filter((e) => pos.has(e.from) && pos.has(e.to))
-    .map((edge) => {
-      const a = pos.get(edge.from)!;
-      const b = pos.get(edge.to)!;
-      const forward = b.x > a.x;
-      const x1 = forward ? a.x + NODE_W : a.x + NODE_W / 2;
-      const y1 = forward ? a.y + NODE_H / 2 : a.y + NODE_H;
-      const x2 = forward ? b.x : b.x + NODE_W / 2;
-      const y2 = forward ? b.y + NODE_H / 2 : b.y;
-      const bend = forward ? (x2 - x1) / 2 : 60;
-      const path = forward
-        ? `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`
-        : `M${x1},${y1} C${x1 + bend},${y1 + bend} ${x2 + bend},${y2 - bend} ${x2},${y2}`;
-      const stroke = 1 + 5 * (Math.log1p(edge.weight) / Math.log1p(maxWeight));
-      const mx = (x1 + x2) / 2 + (forward ? 0 : bend * 0.75);
-      const my = (y1 + y2) / 2;
-      const labelWidth = edge.label.length * 6.4 + 10;
-      return [
-        `<path d="${path}" class="edge" stroke-width="${stroke.toFixed(2)}" marker-end="url(#arrow)"/>`,
-        edge.label
-          ? `<rect x="${(mx - labelWidth / 2).toFixed(1)}" y="${(my - 9).toFixed(1)}" width="${labelWidth.toFixed(1)}" height="18" rx="4" class="edge-label-bg"/>` +
-            `<text x="${mx.toFixed(1)}" y="${(my + 4).toFixed(1)}" class="edge-label">${esc(edge.label)}</text>`
-          : "",
-      ].join("");
-    });
+  const placed: Array<{ x: number; y: number; w: number }> = [];
+  const free = (x: number, y: number, w: number) =>
+    placed.every((p) => Math.abs(p.x - x) * 2 >= p.w + w + 4 || Math.abs(p.y - y) >= 20);
+  const edgePaths: string[] = [];
+  const labels: string[] = [];
+
+  for (const edge of graph.edges) {
+    const a = pos.get(edge.from);
+    const b = pos.get(edge.to);
+    if (!a || !b) continue;
+    const forward = b.x > a.x;
+    const x1 = forward ? a.x + NODE_W : a.x + NODE_W / 2;
+    const y1 = forward ? a.y + NODE_H / 2 : a.y + NODE_H;
+    const x2 = forward ? b.x : b.x + NODE_W / 2;
+    const y2 = forward ? b.y + NODE_H / 2 : b.y;
+    const bend = forward ? (x2 - x1) / 2 : 60;
+    const c1 = forward ? [x1 + bend, y1] : [x1 + bend, y1 + bend];
+    const c2 = forward ? [x2 - bend, y2] : [x2 + bend, y2 - bend];
+    const stroke = 1 + 5 * (Math.log1p(edge.weight) / Math.log1p(maxWeight));
+    edgePaths.push(
+      `<path d="M${x1},${y1} C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${x2},${y2}" class="edge" stroke-width="${stroke.toFixed(2)}" marker-end="url(#arrow)"/>`,
+    );
+    if (!edge.label) continue;
+
+    const w = edge.label.length * 6.4 + 10;
+    const at = (t: number) => {
+      const u = 1 - t;
+      const bez = (p0: number, p1: number, p2: number, p3: number) =>
+        u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+      return { x: bez(x1, c1[0], c2[0], x2), y: bez(y1, c1[1], c2[1], y2) };
+    };
+    const candidates = [0.5, 0.35, 0.65, 0.25, 0.75].map(at);
+    const spot = candidates.find((p) => free(p.x, p.y, w)) ?? {
+      x: candidates[0].x,
+      y: candidates[0].y + 20 * placed.filter((p) => Math.abs(p.x - candidates[0].x) < w).length,
+    };
+    placed.push({ ...spot, w });
+    labels.push(
+      `<rect x="${(spot.x - w / 2).toFixed(1)}" y="${(spot.y - 9).toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="4" class="edge-label-bg"/>` +
+        `<text x="${spot.x.toFixed(1)}" y="${(spot.y + 4).toFixed(1)}" class="edge-label">${esc(edge.label)}</text>`,
+    );
+  }
+  const edges = [...edgePaths, ...labels];
 
   const nodes = graph.nodes
     .filter((n) => pos.has(n.id))
@@ -108,7 +125,7 @@ export function renderSvg(graph: Graph): string {
     `.edge-label{font-size:11px;fill:#374151;text-anchor:middle}`,
     `.edge-label-bg{fill:#ffffff;fill-opacity:.9}`,
     `</style>`,
-    `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker></defs>`,
+    `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker></defs>`,
     `<rect width="100%" height="100%" fill="#ffffff"/>`,
     `<text x="${PAD}" y="${PAD + 4}" class="heading">${esc(graph.title)}</text>`,
     ...edges,
