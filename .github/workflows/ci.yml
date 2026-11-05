@@ -34,6 +34,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run bundle
+      - run: npm run mcpb
 
   audit:
     name: audit
