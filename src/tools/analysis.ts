@@ -14,6 +14,7 @@ import { historicalPrices } from "../analysis/prices.js";
 import { bridgesIn, resolveBridgeTx, type BridgeHop } from "../analysis/bridges.js";
 import type { EnhancedTransaction } from "../helius/types.js";
 import { saveArtifact } from "../cases/store.js";
+import { traceDestinations } from "../evm/trace.js";
 import { shortAddress } from "../cases/diagram.js";
 import { READ_ONLY, safe, type ToolContext } from "./common.js";
 
@@ -114,7 +115,11 @@ export function registerAnalysisTools(ctx: ToolContext): void {
         followBridges: z
           .boolean()
           .default(true)
-          .describe("Stop at Wormhole/deBridge/Mayan transactions and resolve the destination chain and address"),
+          .describe("Stop at Wormhole/deBridge/Mayan/Circle CCTP transactions and resolve the destination chain and address"),
+        followEvm: z
+          .boolean()
+          .default(false)
+          .describe("For crossings to an EVM chain, trace the destination address 2 hops further on that chain (up to 3 destinations)"),
         case: CaseName,
       }),
       annotations: READ_ONLY,
@@ -137,7 +142,13 @@ export function registerAnalysisTools(ctx: ToolContext): void {
         usdAtTime: args.usdAtTime,
         followBridges: args.followBridges,
       });
-      if (!args.case) return json(result);
+      const evm = args.followEvm
+        ? await traceDestinations(result.bridgeCrossings, config.etherscanApiKey)
+        : null;
+      const traced = evm
+        ? { ...result, destinationTraces: evm.traces, destinationsSkipped: evm.skipped }
+        : result;
+      if (!args.case) return json(traced);
 
       const mints = [...new Set(result.edges.map((e) => e.mint))].slice(0, 50);
       const assets = await api.getAssetBatch(mints).catch(() => []);
@@ -150,9 +161,9 @@ export function registerAnalysisTools(ctx: ToolContext): void {
         args.case,
         "trace",
         `Funds ${args.direction === "out" ? "leaving" : "arriving at"} ${shortAddress(args.address)} (${args.hops} hops)`,
-        { ...result, mintSymbols },
+        { ...traced, mintSymbols },
       );
-      return json({ ...result, savedTo });
+      return json({ ...traced, savedTo });
     }),
   );
 
@@ -200,7 +211,7 @@ export function registerAnalysisTools(ctx: ToolContext): void {
     {
       title: "Follow funds across a bridge",
       description:
-        "Resolve where funds went when they left Solana (or where they came from when they arrived) through Wormhole, deBridge or Mayan: other chain, recipient address, amounts and the transaction hash on the other chain. Pass signatures, or an address to scan its recent history for bridge transactions. trace_funds already resolves the crossings it meets.",
+        "Resolve where funds went when they left Solana (or where they came from when they arrived) through Wormhole, deBridge, Mayan or Circle CCTP: other chain, recipient address, amounts and the transaction hash on the other chain. Pass signatures, or an address to scan its recent history for bridge transactions. trace_funds already resolves the crossings it meets.",
       inputSchema: z.object({
         signatures: z.array(z.string()).min(1).max(20).optional(),
         address: Address.optional(),

@@ -33,7 +33,9 @@
 
 ## What it can do
 
-- **Follow the money.** `trace_funds` walks transfers forward or backward up to 5 hops, values every edge in USD at the moment it moved, and stops at Wormhole, deBridge and Mayan crossings to tell you which chain and address the funds landed on.
+- **Follow the money.** `trace_funds` walks transfers forward or backward up to 5 hops, values every edge in USD at the moment it moved, and stops at Wormhole, deBridge, Mayan and Circle CCTP crossings to tell you which chain and address the funds landed on. With `followEvm` it keeps going on the EVM side.
+- **Know who is on the other end.** 16,050 OKX wallets ship built in, each one proven by OKX's own signed proof-of-reserves message. Traces stop at exchange wallets and mark the address before them as a likely deposit address, so you know which exchange to ask.
+- **Catch fake volume.** `detect_wash_trading` reads trades straight from a token's pools and flags wallets trading with themselves, same-slot round trips and bot farms funded from one wallet.
 - **Find the operator.** `find_cluster` mines fee payers, co-signers, rent destinations, shared funders and same-slot activity to surface wallets one actor controls, with the signatures behind every link.
 - **Screen before you buy.** `analyze_token` checks mint and freeze authority, metadata mutability and holder concentration, and tells pools and other program-controlled holders apart from real whales.
 - **See who profited.** `wallet_pnl` prices every swap at the time it happened and flags sales of tokens the wallet never bought.
@@ -47,6 +49,7 @@ Try asking:
 - *"Trace funds out of `<address>` for 3 hops, save it to case `exchange-hack`, then export the report."*
 - *"Are these four wallets the same person?"*
 - *"Did `<wallet>` profit from `<mint>`, and who sent it tokens for free?"*
+- *"Is the volume on `<mint>` real, or bots trading with themselves?"*
 
 ## Install
 
@@ -122,8 +125,11 @@ Helius bills and rate-limits **per RPC call**, not per HTTP request, so raw para
 | --- | --- |
 | `analyze_wallet` | Portfolio value, holdings, wallet age, in/out flow shape, top counterparties, earliest funders, risk flags |
 | `analyze_token` | Rug screen: live mint/freeze authority, metadata mutability, supply, FDV, holder concentration (top1 / top10 / HHI) with pools and other program-controlled holders flagged, 0-100 risk score |
-| `trace_funds` | BFS fund-flow graph, forward or backward, up to 5 hops: nodes, weighted edges valued in USD at the time of each transfer, terminal sinks, circular flows. Stops at bridges and reports where the funds went |
-| `follow_bridge` | Funds that left or entered Solana via Wormhole, deBridge or Mayan: other chain, recipient, amounts, destination-chain tx. Takes signatures, or an address to scan |
+| `trace_funds` | BFS fund-flow graph, forward or backward, up to 5 hops: nodes, weighted edges valued in USD at the time of each transfer, terminal sinks with exchange and deposit-address labels, circular flows. Stops at bridges and reports where the funds went; `followEvm` traces the EVM destination 2 more hops |
+| `follow_bridge` | Funds that left or entered Solana via Wormhole, deBridge, Mayan or Circle CCTP: other chain, recipient, amounts, destination-chain tx. Takes signatures, or an address to scan |
+| `trace_evm` | Fund flow on Ethereum, Base, Arbitrum, BNB Chain and 9 other EVM chains: native and ERC-20 transfers valued in USD at the time, stopping at contracts and labelled addresses |
+| `identify_addresses` | Who is behind an address: built-in exchange wallets, Helius identity when your plan includes it, case and program labels, and a deposit-address check. Every label carries its source and confidence |
+| `detect_wash_trading` | Wash-trading score for a token from its highest-volume pools: self-cancelling wallets, same-slot and quick round trips, volume concentration, traders funded by one wallet. Suspicious traders come with a sample signature |
 | `find_cluster` | From one wallet, discovers likely co-controlled wallets: fee payers, co-signers, rent destinations, shared or sole funders, same-slot activity, creation time. Scored, with signature evidence |
 | `wallet_pnl` | Realized and unrealized PnL per token from swaps, priced at swap time. Flags sales of tokens never bought and, for one mint, who sent the tokens for free |
 | `find_counterparties` | Every address a wallet transacted with, ranked, split by direction and per-mint volume |
@@ -173,6 +179,7 @@ All optional except the API key. See `.env.example`.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HELIUS_API_KEY` | — | Required |
+| `ETHERSCAN_API_KEY` | — | Optional. Lets `trace_evm` and `followEvm` read every listed chain your Etherscan plan covers; without it only Ethereum works, through Blockscout |
 | `HELIUS_NETWORK` | `mainnet` | `mainnet` or `devnet` |
 | `HELIUS_RPC_HOST` | `<network>.helius-rpc.com` | Override the RPC host |
 | `HELIUS_MAX_CONCURRENCY` | 24 | Ceiling on in-flight HTTP requests |
@@ -195,9 +202,11 @@ Everything runs on your machine. What leaves it:
 
 - **Helius** receives the addresses, signatures and mints you query, and your API key.
 - **DefiLlama** receives mint addresses and timestamps for `usdAtTime` prices.
-- **WormholeScan, deBridge and Mayan** receive transaction signatures when a bridge crossing is resolved.
+- **WormholeScan, deBridge, Mayan and Circle** receive transaction signatures when a bridge crossing is resolved.
+- **DexScreener** receives the mint address when `detect_wash_trading` looks up a token's pools.
+- **Blockscout**, or **Etherscan** when `ETHERSCAN_API_KEY` is set, receives EVM addresses when funds are traced on an EVM chain.
 
-None of the last three need an API key, and your Helius key is sent only to Helius. Case files stay in your cases directory.
+Only Helius and Etherscan get an API key, each only its own. Case files stay in your cases directory.
 
 ## Accuracy notes
 
@@ -205,7 +214,9 @@ None of the last three need an API key, and your Helius key is sent only to Heli
 - Current USD values come from Helius pricing and `usdAtTime` values from DefiLlama historical prices; both cover actively traded tokens only. A missing price means unknown, not zero.
 - `wallet_pnl` only knows what the swaps in its sample show. Tokens that arrived by transfer or before the sample have no cost basis; their sales are reported as `unmatchedProceedsUsd` rather than realized PnL.
 - `find_cluster` looks one funder up from the seed. Run it again on a strong member to go further.
-- Bridge resolution covers Wormhole, deBridge and Mayan. deBridge can only be followed outbound; chains the server does not recognise are shown by raw chain id.
+- Bridge resolution covers Wormhole, deBridge, Mayan and Circle CCTP. deBridge and CCTP can only be followed outbound; chains the server does not recognise are shown by raw chain id.
+- Built-in exchange labels come from OKX's proof-of-reserves snapshot of 1 November 2026, regenerated with `scripts/okx-labels.ts`. Deposit-address and hot-wallet labels are inferred from sweep patterns and say so in their `confidence` and `source`.
+- `detect_wash_trading` reads token transfers in and out of pools, so liquidity adds and removals count as trades, and volume routed through other program accounts is reported separately as `routedVolume`. Same-slot buy and sell is also what sandwich and arbitrage bots look like.
 - `analyze_token` scans up to 1000 token accounts. `holderAccountsExact` tells you whether the holder count is the real total or a floor. Holders whose owner is a program or a program-derived address are flagged `isProgramOwned`; concentration figures still include them, and `programControlledPct` says how much of the supply they hold.
 - Risk flags and scores are heuristics for triage. They point an investigation at the right transactions; they are not a verdict.
 

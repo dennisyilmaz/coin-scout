@@ -16,6 +16,7 @@ const MISSING = -1;
 const cache = new TtlCache(50_000);
 
 export function priceKey(mint: string): string {
+  if (mint.includes(":")) return mint;
   return `solana:${SOL_ALIASES.has(mint) ? WSOL : mint}`;
 }
 
@@ -30,7 +31,8 @@ export class PriceBook {
   ) {}
 
   at(mint: string, ts: number): number | null {
-    return this.prices.get(`${priceKey(mint)}@${bucketOf(ts)}`) ?? null;
+    const price = this.prices.get(`${priceKey(mint)}@${bucketOf(ts)}`);
+    return price !== undefined && price >= 0 ? price : null;
   }
 
   usd(mint: string, ts: number, amount: number): number | null {

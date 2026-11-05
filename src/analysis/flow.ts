@@ -4,6 +4,7 @@ import { BURN_ADDRESSES, labelOf } from "../util/programs.js";
 import { detectBridgeTxs, resolveBridgeTx, type BridgeHop, type BridgeName } from "./bridges.js";
 import { historicalPrices } from "./prices.js";
 import { amountOf, fetchTransfers } from "./transfers.js";
+import { describeEntity, identifyEntities, knownEntity } from "../labels/entities.js";
 
 const INCINERATOR = "1nc1nerator11111111111111111111111111111111";
 const MAX_BRIDGE_RESOLUTIONS = 12;
@@ -160,7 +161,7 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
       .slice(0, options.branchFactor)
       .map(([address]) => address)
       .filter((address) => {
-        if (visited.size >= options.maxNodes) return false;
+        if (visited.size >= options.maxNodes || knownEntity(address)) return false;
         visited.add(address);
         hopOf.set(address, hop);
         return true;
@@ -174,6 +175,27 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
   ]);
   const nodes = buildNodes(edgeList, hopOf, options.root);
   const priced = options.usdAtTime && edgeList.some((e) => e.usdAtTime !== null);
+  const terminals = nodes
+    .filter((n) => n.outEdges === 0 && n.address !== options.root)
+    .sort(
+      (a, b) =>
+        Number(Boolean(knownEntity(b.address))) - Number(Boolean(knownEntity(a.address))) ||
+        (priced ? (b.receivedUsd ?? -1) - (a.receivedUsd ?? -1) : b.received - a.received),
+    )
+    .slice(0, 20);
+  const forward = options.direction === "out";
+  const feeders = forward
+    ? edgeList.filter((e) => knownEntity(e.to) && e.from !== options.root).map((e) => e.from)
+    : [];
+  const { entities, notes: entityNotes } = await identifyEntities(
+    api,
+    [...new Set([...feeders, ...terminals.map((t) => t.address)])],
+    { deposits: forward },
+  );
+  const withEntity = <T extends { address: string; label: string | null }>(node: T) => {
+    const entity = entities.get(node.address) ?? null;
+    return { ...node, label: node.label ?? (entity ? describeEntity(entity) : null), entity };
+  };
   const value = (e: FlowEdge) => (priced ? (e.usdAtTime ?? -1) : e.amount);
   const shownEdges = withPathsToRoot(
     [...edgeList].sort((a, b) => value(b) - value(a) || b.amount - a.amount),
@@ -200,14 +222,12 @@ export async function traceFunds(api: HeliusApi, options: TraceOptions) {
     priceNote,
     bridgeCrossings: crossings.resolved,
     unresolvedBridgeTxs: crossings.unresolved,
-    terminals: nodes
-      .filter((n) => n.outEdges === 0 && n.address !== options.root)
-      .sort((a, b) => (priced ? (b.receivedUsd ?? -1) - (a.receivedUsd ?? -1) : b.received - a.received))
-      .slice(0, 20),
+    terminals: terminals.map(withEntity),
+    entityNotes,
     cycles: findCycles(edgeList, options.root),
     nodesShown: Math.min(nodes.length, options.maxNodesShown),
     edgesShown: shownEdges.length,
-    nodes: nodes.slice(0, options.maxNodesShown),
+    nodes: nodes.slice(0, options.maxNodesShown).map((n) => (entities.has(n.address) ? withEntity(n) : n)),
     edges: shownEdges.map((e) => ({
         from: e.from,
         to: e.to,
@@ -278,7 +298,7 @@ async function resolveCrossings(
   edges: FlowEdge[],
   forward: boolean,
 ) {
-  const resolved: Array<BridgeHop & { via: { from: string; to: string; mint: string; amount: number } }> = [];
+  const resolved: Array<BridgeHop & { via: { from: string; to: string; mint: string; amount: number; ts: number | null } }> = [];
   const unresolved: Array<{ signature: string; bridges: BridgeName[]; reason: string }> = [];
   const entries = [...bridgeSigs.entries()];
 
@@ -289,8 +309,8 @@ async function resolveCrossings(
       const isTarget = (e: FlowEdge) => (wanted?.has(forward ? e.to : e.from) ? 1 : 0);
       const edge = inTx.sort((a, b) => isTarget(b) - isTarget(a) || b.amount - a.amount)[0];
       const via = edge
-        ? { from: edge.from, to: edge.to, mint: edge.mint, amount: edge.amount }
-        : { from: "", to: "", mint: "", amount: 0 };
+        ? { from: edge.from, to: edge.to, mint: edge.mint, amount: edge.amount, ts: edge.firstTs }
+        : { from: "", to: "", mint: "", amount: 0, ts: null };
       const { hops, errors } = await resolveBridgeTx(signature, bridges);
       if (hops.length === 0) {
         unresolved.push({ signature, bridges, reason: errors[0] ?? "bridge API has no record of this transaction" });

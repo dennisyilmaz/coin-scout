@@ -113,6 +113,20 @@ const compare = await callTool("compare_wallets", {
 });
 console.log(`     pairs=${compare?.pairs?.length} strength=${compare?.pairs?.[0]?.linkStrength}`);
 
+const OKX_WALLET = "is6MTRHEgyFLNTfYcuV4QBWLjrZBfmhVNYR6ccgr8KV";
+const ids = await callTool("identify_addresses", { addresses: [OKX_WALLET, probeAddress ?? BONK] });
+console.log(`     ${ids?.addresses?.map((a: any) => `${a.address.slice(0, 8)}=${a.label}`).join(" ")}`);
+
+const wash = await callTool("detect_wash_trading", { mint: BONK, maxTransfers: 300 });
+console.log(`     score=${wash?.washScore} verdict=${wash?.verdict} pools=${wash?.pools?.length} trades=${wash?.sample?.trades}`);
+
+const evm = await callTool("trace_evm", {
+  chain: "Ethereum",
+  address: "0x75cb58a216bac366343bfc7206ca51ce0cf3190f",
+  hops: 1,
+});
+console.log(`     source=${evm?.source} edges=${evm?.edgeCount} usd=${evm?.totalUsdOut}`);
+
 await callTool("get_account", { addresses: [BONK, RAYDIUM_AUTHORITY] });
 await callTool("search_assets", { creatorAddress: RAYDIUM_AUTHORITY, limit: 5 });
 await callTool("solana_rpc", { method: "getVersion", params: [] });
